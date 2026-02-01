@@ -1,9 +1,22 @@
+import { useState } from "react";
+import { useCart } from "../context/useCart";
+
 const CartPanel = () => {
+  const { state, dispatch, totalCost } = useCart();
+  const [showToast, setShowToast] = useState(false);
+
   return (
     <aside className="cart">
+      {showToast ? (
+        <div className="toast" role="status" aria-live="polite">
+          Thank you for the purchase!
+        </div>
+      ) : null}
       <div className="cart-header">
         <h3>Pack list</h3>
-        <button className="ghost">Clear</button>
+        <button className="ghost" onClick={() => dispatch({ type: "clear" })}>
+          Clear
+        </button>
       </div>
 
       <p className="muted">xxx</p>

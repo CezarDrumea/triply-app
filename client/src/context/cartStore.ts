@@ -9,7 +9,8 @@ export type CartAction =
   | { type: "add"; product: Product }
   | { type: "remove"; productId: number }
   | { type: "decrease"; productId: number }
-  | { type: "clear" };
+  | { type: "clear" }
+  | { type: "set"; items: CartItem[] };
 
 type CartContextType = {
   state: CartState;
@@ -67,6 +68,10 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
 
     case "clear": {
       return { items: [] };
+    }
+
+    case "set": {
+      return { items: action.items };
     }
 
     default:

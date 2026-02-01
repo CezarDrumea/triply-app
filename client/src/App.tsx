@@ -1,14 +1,57 @@
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import CartPanel from "./components/CartPanel";
 import SectionHeading from "./components/SectionHeading";
 import { CartProvider } from "./context/CartContext";
+import { SERVER_LOCATION } from "./utils/constants";
+import { useFetch } from "./hooks/useFetch";
+import { type Destination, type Post, type Product } from "./types";
+import DestinationCard from "./components/DestinationCard";
+import PostCard from "./components/PostCard";
+import ProductCard from "./components/ProductCard";
+import { useCart } from "./context/useCart";
+
+type Category = "all" | "gear" | "prints" | "guides";
 
 const TABS = ["shop", "blog", "destinations"] as const;
 
-// type Tab = (typeof TABS)[number];
+type Tab = (typeof TABS)[number];
 
 function AppContent() {
-  const [activeTab, setActiveTab] = useState("shop");
+  const [activeTab, setActiveTab] = useState<Tab>("shop");
+  const [category, setCategory] = useState<Category>("all");
+  const { dispatch, totalItems } = useCart();
+
+  const productsState = useFetch<Product[]>(`${SERVER_LOCATION}/api/products`);
+
+  const destinationsState = useFetch<Destination[]>(
+    `${SERVER_LOCATION}/api/destinations`,
+  );
+  const postsState = useFetch<Post[]>(`${SERVER_LOCATION}/api/posts`);
+
+  const destinations = useMemo(
+    () => destinationsState.data ?? [],
+    [destinationsState.data],
+  );
+  const posts = useMemo(() => postsState.data ?? [], [postsState.data]);
+
+  const products = useMemo(
+    () => productsState.data ?? [],
+    [productsState.data],
+  );
+
+  const filteredProducts = useMemo(() => {
+    if (category === "all") return products;
+    return products.filter((product) => product.category === category);
+  }, [products, category]);
+
+  const addToCart = useCallback(
+    (product: Product) => dispatch({ type: "add", product }),
+    [dispatch],
+  );
+
+  useEffect(() => {
+    document.title = `Triply - ${activeTab}`;
+  }, [activeTab]);
 
   return (
     <div className="page">
@@ -21,6 +64,7 @@ function AppContent() {
         <nav className="nav">
           {TABS.map((tab) => (
             <button
+              key={tab}
               className={`pill ${activeTab === tab ? "active" : null}`}
               onClick={() => setActiveTab(tab)}
             >
@@ -31,7 +75,7 @@ function AppContent() {
 
         <div className="cart-summary">
           <span className="muted">Cart</span>
-          <span className="pill active">xxxx items</span>
+          <span className="pill active">{totalItems} items</span>
         </div>
       </header>
 
@@ -51,24 +95,15 @@ function AppContent() {
         <div className="hero-card">
           <h3>Next departure</h3>
           <p className="muted">
-            Kyoto winter loop {"->"} 4 nights {"->"} curated kit inside
+            Kyoto winter loop ▸ 4 nights ▸ curated kit inside
           </p>
           <div className="hero-grid">
-            {
-              // implement
-            }
-            <div>
-              <p className="strong">xxxxx</p>
-              <p className="muted">xxxx</p>
-            </div>
-            <div>
-              <p className="strong">xxxxx</p>
-              <p className="muted">xxxx</p>
-            </div>
-            <div>
-              <p className="strong">xxxxx</p>
-              <p className="muted">xxxx</p>
-            </div>
+            {destinations.slice(0, 3).map((destination) => (
+              <div key={destination.id}>
+                <p className="strong">{destination.name}</p>
+                <p className="muted">{destination.temperature}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -84,15 +119,23 @@ function AppContent() {
               />
               <div className="filters">
                 {(["all", "gear", "prints", "guides"] as const).map((item) => (
-                  <button key={item} className="pill">
+                  <button
+                    key={item}
+                    className="pill"
+                    onClick={() => setCategory(item)}
+                  >
                     {item}
                   </button>
                 ))}
               </div>
               <div className="grid products">
-                {
-                  // implement ProductCard
-                }
+                {filteredProducts.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    onAdd={addToCart}
+                  />
+                ))}
               </div>
             </>
           ) : null}
@@ -105,9 +148,9 @@ function AppContent() {
                 description="Grab a two-day itinerary or dig into a longer city loop with packing reminders."
               />
               <div className="grid posts">
-                {
-                  // implement PostCard
-                }
+                {posts.map((post) => (
+                  <PostCard key={post.id} post={post} />
+                ))}
               </div>
             </>
           ) : null}
@@ -120,9 +163,12 @@ function AppContent() {
                 description="Get to know new locations."
               />
               <div className="grid destinations">
-                {
-                  // implement DestinationCard
-                }
+                {destinations.map((destination) => (
+                  <DestinationCard
+                    key={destination.id}
+                    destination={destination}
+                  />
+                ))}
               </div>
             </>
           ) : null}
