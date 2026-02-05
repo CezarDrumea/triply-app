@@ -21,8 +21,9 @@ type Tab = (typeof TABS)[number] | "admin";
 function AppContent() {
   const [activeTab, setActiveTab] = useState<Tab>("shop");
   const [category, setCategory] = useState<Category>("all");
-  const [role, setRole] = useState<Role | null>(null);
+  const [role, setRole] = useState<Role>("guest");
   const [authLoading, setAuthLoading] = useState(true);
+  const [showAuth, setShowAuth] = useState(false);
   const { dispatch, totalItems } = useCart();
 
   const productsState = useFetch<Product[]>(`${SERVER_LOCATION}/api/products`);
@@ -36,6 +37,7 @@ function AppContent() {
     () => destinationsState.data ?? [],
     [destinationsState.data],
   );
+
   const posts = useMemo(() => postsState.data ?? [], [postsState.data]);
   const products = useMemo(
     () => productsState.data ?? [],
@@ -50,6 +52,8 @@ function AppContent() {
     if (category === "all") return products;
     return products.filter((product) => product.category === category);
   }, [products, category]);
+
+  const canShop = role === "user" || role === "admin";
 
   useEffect(() => {
     document.title = `Triply - ${activeTab}`;
@@ -70,9 +74,9 @@ function AppContent() {
           data: { role: Role | null };
         };
 
-        if (active) setRole(payload.data.role ?? null);
+        if (active) setRole(payload.data.role ?? "guest");
       } catch {
-        if (active) setRole(null);
+        if (active) setRole("guest");
       } finally {
         if (active) setAuthLoading(false);
       }
@@ -93,7 +97,7 @@ function AppContent() {
       method: "POST",
       credentials: "include",
     });
-    setRole(null);
+    setRole("guest");
     setActiveTab("shop");
   }, []);
 
@@ -108,6 +112,17 @@ function AppContent() {
           <p className="muted">We are loading your role and preferences.</p>
         </div>
       </div>
+    );
+  }
+
+  if (showAuth) {
+    return (
+      <AuthPage
+        onLogin={(nextRole) => {
+          setRole(nextRole);
+          setShowAuth(false);
+        }}
+      />
     );
   }
 
@@ -136,10 +151,23 @@ function AppContent() {
         </nav>
 
         <div className="cart-summary">
-          <span className="muted">Cart</span>
-          <span className="pill active">{totalItems} items</span>
-          <button className="ghost" onClick={handleSignOut}>
-            Sign out
+          {canShop ? (
+            <>
+              <span className="muted">Cart</span>
+              <span className="pill active">{totalItems} items</span>
+            </>
+          ) : (
+            <span className="muted">Guest mode</span>
+          )}
+
+          <button
+            className="ghost"
+            onClick={() => {
+              if (role === "guest") setShowAuth(true);
+              else void handleSignOut();
+            }}
+          >
+            {role === "guest" ? "Log in" : "Sign out"}
           </button>
         </div>
       </header>
@@ -203,6 +231,7 @@ function AppContent() {
                     key={product.id}
                     product={product}
                     onAdd={addToCart}
+                    canAdd={canShop}
                   />
                 ))}
               </div>
@@ -252,7 +281,7 @@ function AppContent() {
           ) : null}
         </section>
 
-        <CartPanel />
+        {canShop ? <CartPanel /> : null}
       </main>
 
       <footer className="footer">

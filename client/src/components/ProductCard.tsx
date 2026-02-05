@@ -3,9 +3,11 @@ import type { Product } from "../types";
 const ProductCard = ({
   product,
   onAdd,
+  canAdd,
 }: {
   product: Product;
   onAdd: (product: Product) => void;
+  canAdd: boolean;
 }) => {
   return (
     <article className="card product-card">
@@ -25,9 +27,13 @@ const ProductCard = ({
           <span className="rating">{product.rating} ⭐️</span>
         </div>
 
-        <button className="primary" onClick={() => onAdd(product)}>
-          Add to cart
-        </button>
+        {canAdd ? (
+          <button className="primary" onClick={() => onAdd(product)}>
+            Add to cart
+          </button>
+        ) : (
+          <button className="ghost">Log in to buy</button>
+        )}
       </div>
     </article>
   );

@@ -38,4 +38,4 @@ export interface Post {
   title: string;
 }
 
-export type Role = "user" | "admin";
+export type Role = "user" | "admin" | "guest";

@@ -36,6 +36,7 @@ async function mutateCart(
       response = await fetch(`${SERVER_LOCATION}/api/cart/items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: action.product.id, quantity: 1 }),
       });
       break;
     }
