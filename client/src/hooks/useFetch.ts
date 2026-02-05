@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ApiResponse } from "../types";
 
 interface FetchState<T> {
@@ -14,6 +14,12 @@ export function useFetch<T>(url: `http://localhost:4000/${string}`) {
     error: null,
   });
 
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const reload = useCallback(() => {
+    setReloadKey((prev) => prev + 1);
+  }, []);
+
   useEffect(() => {
     let ignore = false;
 
@@ -21,7 +27,7 @@ export function useFetch<T>(url: `http://localhost:4000/${string}`) {
       setState((prev) => ({ ...prev, loading: true, error: null }));
 
       try {
-        const response = await fetch(url);
+        const response = await fetch(url, { credentials: "include" });
         if (!response.ok) throw new Error(`Request failed: ${response.status}`);
 
         const payload = (await response.json()) as ApiResponse<T>;
@@ -43,7 +49,7 @@ export function useFetch<T>(url: `http://localhost:4000/${string}`) {
     return () => {
       ignore = true;
     };
-  }, [url]);
+  }, [url, reloadKey]);
 
-  return state;
+  return { ...state, reload };
 }

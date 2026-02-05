@@ -4,21 +4,25 @@ import SectionHeading from "./components/SectionHeading";
 import { CartProvider } from "./context/CartContext";
 import { SERVER_LOCATION } from "./utils/constants";
 import { useFetch } from "./hooks/useFetch";
-import { type Destination, type Post, type Product } from "./types";
+import { type Destination, type Post, type Product, type Role } from "./types";
 import DestinationCard from "./components/DestinationCard";
 import PostCard from "./components/PostCard";
 import ProductCard from "./components/ProductCard";
 import { useCart } from "./context/useCart";
+import AuthPage from "./components/AuthPage";
+import AdminPanel from "./components/AdminPanel";
 
 type Category = "all" | "gear" | "prints" | "guides";
 
 const TABS = ["shop", "blog", "destinations"] as const;
 
-type Tab = (typeof TABS)[number];
+type Tab = (typeof TABS)[number] | "admin";
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<Tab>("shop");
   const [category, setCategory] = useState<Category>("all");
+  const [role, setRole] = useState<Role | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const { dispatch, totalItems } = useCart();
 
   const productsState = useFetch<Product[]>(`${SERVER_LOCATION}/api/products`);
@@ -33,10 +37,13 @@ function AppContent() {
     [destinationsState.data],
   );
   const posts = useMemo(() => postsState.data ?? [], [postsState.data]);
-
   const products = useMemo(
     () => productsState.data ?? [],
     [productsState.data],
+  );
+  const tabs = useMemo<Tab[]>(
+    () => (role === "admin" ? [...TABS, "admin"] : [...TABS]),
+    [role],
   );
 
   const filteredProducts = useMemo(() => {
@@ -44,14 +51,69 @@ function AppContent() {
     return products.filter((product) => product.category === category);
   }, [products, category]);
 
+  useEffect(() => {
+    document.title = `Triply - ${activeTab}`;
+  }, [activeTab]);
+
+  useEffect(() => {
+    let active = true;
+
+    void (async () => {
+      try {
+        const response = await fetch(`${SERVER_LOCATION}/api/auth/me`, {
+          credentials: "include",
+        });
+
+        if (!response.ok) throw Error("Failed to load auth state");
+
+        const payload = (await response.json()) as {
+          data: { role: Role | null };
+        };
+
+        if (active) setRole(payload.data.role ?? null);
+      } catch {
+        if (active) setRole(null);
+      } finally {
+        if (active) setAuthLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  });
+
   const addToCart = useCallback(
     (product: Product) => dispatch({ type: "add", product }),
     [dispatch],
   );
 
-  useEffect(() => {
-    document.title = `Triply - ${activeTab}`;
-  }, [activeTab]);
+  const handleSignOut = useCallback(async () => {
+    await fetch(`${SERVER_LOCATION}/api/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
+    setRole(null);
+    setActiveTab("shop");
+  }, []);
+
+  console.log(activeTab, role);
+
+  if (authLoading) {
+    return (
+      <div className="auth-page">
+        <div className="auth-card">
+          <p className="eyebrow">Triply Access</p>
+          <h1>Checking your session...</h1>
+          <p className="muted">We are loading your role and preferences.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!role) {
+    return <AuthPage onLogin={setRole} />;
+  }
 
   return (
     <div className="page">
@@ -62,7 +124,7 @@ function AppContent() {
         </div>
 
         <nav className="nav">
-          {TABS.map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab}
               className={`pill ${activeTab === tab ? "active" : null}`}
@@ -76,6 +138,9 @@ function AppContent() {
         <div className="cart-summary">
           <span className="muted">Cart</span>
           <span className="pill active">{totalItems} items</span>
+          <button className="ghost" onClick={handleSignOut}>
+            Sign out
+          </button>
         </div>
       </header>
 
@@ -87,8 +152,12 @@ function AppContent() {
             Triply blends ecommerce with a travel journal.
           </p>
           <div className="hero-actions">
-            <button className="primary">Start shopping</button>
-            <button className="ghost">Browser itineraries</button>
+            <button className="primary" onClick={() => setActiveTab("shop")}>
+              Start shopping
+            </button>
+            <button className="ghost" onClick={() => setActiveTab("blog")}>
+              Browser itineraries
+            </button>
           </div>
         </div>
 
@@ -171,6 +240,15 @@ function AppContent() {
                 ))}
               </div>
             </>
+          ) : null}
+
+          {activeTab === "admin" && role === "admin" ? (
+            <AdminPanel
+              onDestinationAdded={destinationsState.reload}
+              onPostAdded={postsState.reload}
+              onProductAdded={productsState.reload}
+              onSignOut={handleSignOut}
+            />
           ) : null}
         </section>
 

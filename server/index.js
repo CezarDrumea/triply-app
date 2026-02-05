@@ -6,9 +6,54 @@ import { destinations, posts, products } from './seed-data.js'
 
 const app = express()
 const PORT = 4000
+const allowedOrigins = new Set(['http://localhost:5173', 'http://127.0.0.1:5173'])
 
-app.use(cors())
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.has(origin)) {
+        callback(null, true)
+      } else {
+        callback(new Error('Not allowed by CORS'))
+      }
+    },
+    credentials: true
+  })
+)
 app.use(express.json())
+
+const ROLE_COOKIE = 'triply_role'
+
+function parseCookies(cookieHeader = '') {
+  return cookieHeader
+    .split(';')
+    .map(part => part.trim())
+    .filter(Boolean)
+    .reduce((acc, part) => {
+      const [key, ...rest] = part.split('=')
+      acc[key] = decodeURIComponent(rest.join('='))
+      return acc
+    }, {})
+}
+
+function getRole(req) {
+  const cookies = parseCookies(req.headers.cookie ?? '')
+  const role = cookies[ROLE_COOKIE]
+  return role === 'admin' || role === 'user' ? role : null
+}
+
+function requireAdmin(req, res, next) {
+  const role = getRole(req)
+  if (!role) {
+    res.status(401).json({ error: 'authentication required' })
+    return
+  }
+  if (role !== 'admin') {
+    res.status(403).json({ error: 'admin access required' })
+    return
+  }
+  next()
+}
 
 async function ensureDatabase() {
   const dbExists = fs.existsSync(dbPath)
@@ -146,6 +191,32 @@ app.get('/api/products', async (_req, res) => {
   res.json({ data: rows })
 })
 
+app.get('/api/auth/me', (req, res) => {
+  const role = getRole(req)
+  res.json({ data: { role } })
+})
+
+app.post('/api/auth/login', (req, res) => {
+  const { role } = req.body ?? {}
+  if (role !== 'user' && role !== 'admin') {
+    res.status(400).json({ error: 'role must be user or admin' })
+    return
+  }
+
+  res.cookie(ROLE_COOKIE, role, {
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 1000 * 60 * 60 * 24 * 7
+  })
+
+  res.json({ data: { role } })
+})
+
+app.post('/api/auth/logout', (_req, res) => {
+  res.clearCookie(ROLE_COOKIE, { httpOnly: true, sameSite: 'lax' })
+  res.json({ data: { role: null } })
+})
+
 app.get('/api/posts', async (_req, res) => {
   const db = getDb()
   const rows = await all(db, 'SELECT * FROM posts ORDER BY date DESC')
@@ -266,6 +337,93 @@ app.get('/api/summary', async (_req, res) => {
       destinations: destinationsCount.count
     }
   })
+})
+
+app.post('/api/admin/products', requireAdmin, async (req, res) => {
+  const { name, price, category, rating, image, badge, description } = req.body ?? {}
+  const resolvedPrice = Number(price)
+  const resolvedRating = Number(rating)
+
+  if (!name || !image || !description) {
+    res.status(400).json({ error: 'name, image, and description are required' })
+    return
+  }
+  if (!Number.isFinite(resolvedPrice) || resolvedPrice <= 0) {
+    res.status(400).json({ error: 'price must be a positive number' })
+    return
+  }
+  if (!Number.isFinite(resolvedRating) || resolvedRating < 0 || resolvedRating > 5) {
+    res.status(400).json({ error: 'rating must be between 0 and 5' })
+    return
+  }
+  if (!['gear', 'prints', 'guides'].includes(category)) {
+    res.status(400).json({ error: 'category must be gear, prints, or guides' })
+    return
+  }
+
+  const db = getDb()
+  const result = await run(
+    db,
+    `INSERT INTO products (name, price, category, rating, image, badge, description)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [name, resolvedPrice, category, resolvedRating, image, badge ?? null, description]
+  )
+  const [row] = await all(db, 'SELECT * FROM products WHERE id = ?', [result.lastID])
+  db.close()
+  res.json({ data: row })
+})
+
+app.post('/api/admin/posts', requireAdmin, async (req, res) => {
+  const { title, excerpt, city, days, cover, date } = req.body ?? {}
+  const resolvedDays = Number(days)
+  const resolvedDate =
+    typeof date === 'string' && date.trim().length > 0
+      ? date
+      : new Date().toISOString().slice(0, 10)
+
+  if (!title || !excerpt || !city || !cover) {
+    res.status(400).json({ error: 'title, excerpt, city, and cover are required' })
+    return
+  }
+  if (!Number.isFinite(resolvedDays) || resolvedDays <= 0) {
+    res.status(400).json({ error: 'days must be a positive number' })
+    return
+  }
+
+  const db = getDb()
+  const result = await run(
+    db,
+    `INSERT INTO posts (title, excerpt, city, days, cover, date)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [title, excerpt, city, resolvedDays, cover, resolvedDate]
+  )
+  const [row] = await all(db, 'SELECT * FROM posts WHERE id = ?', [result.lastID])
+  db.close()
+  res.json({ data: row })
+})
+
+app.post('/api/admin/destinations', requireAdmin, async (req, res) => {
+  const { name, country, temperature, season, image, highlight } = req.body ?? {}
+
+  if (!name || !country || !temperature || !season || !image || !highlight) {
+    res.status(400).json({
+      error: 'name, country, temperature, season, image, and highlight are required'
+    })
+    return
+  }
+
+  const db = getDb()
+  const result = await run(
+    db,
+    `INSERT INTO destinations (name, country, temperature, season, image, highlight)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [name, country, temperature, season, image, highlight]
+  )
+  const [row] = await all(db, 'SELECT * FROM destinations WHERE id = ?', [
+    result.lastID
+  ])
+  db.close()
+  res.json({ data: row })
 })
 
 ensureDatabase()
