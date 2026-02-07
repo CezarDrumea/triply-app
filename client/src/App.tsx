@@ -142,7 +142,7 @@ function AppContent() {
           {tabs.map((tab) => (
             <button
               key={tab}
-              className={`pill ${activeTab === tab ? "active" : null}`}
+              className={activeTab === tab ? "pill active" : "pill"}
               onClick={() => setActiveTab(tab)}
             >
               {tab}
@@ -218,7 +218,7 @@ function AppContent() {
                 {(["all", "gear", "prints", "guides"] as const).map((item) => (
                   <button
                     key={item}
-                    className="pill"
+                    className={category === item ? "pill active" : "pill"}
                     onClick={() => setCategory(item)}
                   >
                     {item}
