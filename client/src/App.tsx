@@ -1,107 +1,88 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import CartPanel from "./components/CartPanel";
 import SectionHeading from "./components/SectionHeading";
-import { CartProvider } from "./context/CartContext";
-import { SERVER_LOCATION } from "./utils/constants";
-import { useFetch } from "./hooks/useFetch";
-import { type Destination, type Post, type Product, type Role } from "./types";
+import { type Product } from "./types";
 import DestinationCard from "./components/DestinationCard";
 import PostCard from "./components/PostCard";
 import ProductCard from "./components/ProductCard";
-import { useCart } from "./context/useCart";
 import AuthPage from "./components/AuthPage";
 import AdminPanel from "./components/AdminPanel";
+import {
+  setActiveTab,
+  setCategory,
+  setShowAuth,
+  TABS,
+  type Tab,
+} from "./store/slices/uiSlice";
+import { useTypedDispatch, useTypedSelector } from "./store/hooks";
+import {
+  addToCart,
+  fetchCart,
+  selectCartTotals,
+} from "./store/slices/cartSlice";
+import { loadSession, logout } from "./store/slices/authSlice";
+import {
+  fetchDestinations,
+  fetchPosts,
+  fetchProducts,
+} from "./store/slices/catalogSlice";
 
-type Category = "all" | "gear" | "prints" | "guides";
+function App() {
+  const dispatch = useTypedDispatch();
+  const activeTab = useTypedSelector((state) => state.ui.activeTab);
+  const category = useTypedSelector((state) => state.ui.category);
+  const showAuth = useTypedSelector((state) => state.ui.showAuth);
 
-const TABS = ["shop", "blog", "destinations"] as const;
+  const role = useTypedSelector((state) => state.auth.role);
 
-type Tab = (typeof TABS)[number] | "admin";
+  const authLoading = useTypedSelector((state) => state.auth.authLoading);
 
-function AppContent() {
-  const [activeTab, setActiveTab] = useState<Tab>("shop");
-  const [category, setCategory] = useState<Category>("all");
-  const [role, setRole] = useState<Role>("guest");
-  const [authLoading, setAuthLoading] = useState(true);
-  const [showAuth, setShowAuth] = useState(false);
-  const { dispatch, totalItems } = useCart();
+  const products = useTypedSelector((state) => state.catalog.products);
+  const posts = useTypedSelector((state) => state.catalog.posts);
+  const destinations = useTypedSelector((state) => state.catalog.destinations);
 
-  const productsState = useFetch<Product[]>(`${SERVER_LOCATION}/api/products`);
+  const { totalItems } = useTypedSelector(selectCartTotals);
 
-  const destinationsState = useFetch<Destination[]>(
-    `${SERVER_LOCATION}/api/destinations`,
-  );
-  const postsState = useFetch<Post[]>(`${SERVER_LOCATION}/api/posts`);
+  useEffect(() => {
+    dispatch(loadSession());
+    dispatch(fetchProducts());
+    dispatch(fetchPosts());
+    dispatch(fetchDestinations());
+    dispatch(fetchCart());
+  }, [dispatch]);
 
-  const destinations = useMemo(
-    () => destinationsState.data ?? [],
-    [destinationsState.data],
-  );
-
-  const posts = useMemo(() => postsState.data ?? [], [postsState.data]);
-  const products = useMemo(
-    () => productsState.data ?? [],
-    [productsState.data],
-  );
   const tabs = useMemo<Tab[]>(
     () => (role === "admin" ? [...TABS, "admin"] : [...TABS]),
     [role],
   );
+
+  const canShop = role === "user" || role === "admin";
 
   const filteredProducts = useMemo(() => {
     if (category === "all") return products;
     return products.filter((product) => product.category === category);
   }, [products, category]);
 
-  const canShop = role === "user" || role === "admin";
+  const addProductToCart = useCallback(
+    (product: Product) => void dispatch(addToCart(product)),
+    [dispatch],
+  );
 
   useEffect(() => {
     document.title = `Triply - ${activeTab}`;
   }, [activeTab]);
 
-  useEffect(() => {
-    let active = true;
-
-    void (async () => {
-      try {
-        const response = await fetch(`${SERVER_LOCATION}/api/auth/me`, {
-          credentials: "include",
-        });
-
-        if (!response.ok) throw Error("Failed to load auth state");
-
-        const payload = (await response.json()) as {
-          data: { role: Role | null };
-        };
-
-        if (active) setRole(payload.data.role ?? "guest");
-      } catch {
-        if (active) setRole("guest");
-      } finally {
-        if (active) setAuthLoading(false);
-      }
-    })();
-
-    return () => {
-      active = false;
-    };
-  });
-
-  const addToCart = useCallback(
-    (product: Product) => dispatch({ type: "add", product }),
-    [dispatch],
-  );
-
   const handleSignOut = useCallback(async () => {
-    await fetch(`${SERVER_LOCATION}/api/auth/logout`, {
-      method: "POST",
-      credentials: "include",
-    });
-    setRole("guest");
-    setActiveTab("shop");
-  }, []);
+    try {
+      await dispatch(logout()).unwrap();
+    } catch (err) {
+      console.error(err);
+    }
 
-  console.log(activeTab, role);
+    dispatch(setActiveTab("shop"));
+  }, [dispatch]);
+
+  ////////////////
 
   if (authLoading) {
     return (
@@ -116,18 +97,11 @@ function AppContent() {
   }
 
   if (showAuth) {
-    return (
-      <AuthPage
-        onLogin={(nextRole) => {
-          setRole(nextRole);
-          setShowAuth(false);
-        }}
-      />
-    );
+    return <AuthPage />;
   }
 
   if (!role) {
-    return <AuthPage onLogin={setRole} />;
+    return <AuthPage />;
   }
 
   return (
@@ -139,11 +113,11 @@ function AppContent() {
         </div>
 
         <nav className="nav">
-          {tabs.map((tab) => (
+          {tabs.map((tab: Tab) => (
             <button
               key={tab}
               className={activeTab === tab ? "pill active" : "pill"}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => dispatch(setActiveTab(tab))}
             >
               {tab}
             </button>
@@ -163,7 +137,7 @@ function AppContent() {
           <button
             className="ghost"
             onClick={() => {
-              if (role === "guest") setShowAuth(true);
+              if (role === "guest") dispatch(setShowAuth(true));
               else void handleSignOut();
             }}
           >
@@ -180,10 +154,16 @@ function AppContent() {
             Triply blends ecommerce with a travel journal.
           </p>
           <div className="hero-actions">
-            <button className="primary" onClick={() => setActiveTab("shop")}>
+            <button
+              className="primary"
+              onClick={() => dispatch(setActiveTab("shop"))}
+            >
               Start shopping
             </button>
-            <button className="ghost" onClick={() => setActiveTab("blog")}>
+            <button
+              className="ghost"
+              onClick={() => dispatch(setActiveTab("blog"))}
+            >
               Browser itineraries
             </button>
           </div>
@@ -219,7 +199,7 @@ function AppContent() {
                   <button
                     key={item}
                     className={category === item ? "pill active" : "pill"}
-                    onClick={() => setCategory(item)}
+                    onClick={() => dispatch(setCategory(item))}
                   >
                     {item}
                   </button>
@@ -230,7 +210,7 @@ function AppContent() {
                   <ProductCard
                     key={product.id}
                     product={product}
-                    onAdd={addToCart}
+                    onAdd={addProductToCart}
                     canAdd={canShop}
                   />
                 ))}
@@ -273,9 +253,9 @@ function AppContent() {
 
           {activeTab === "admin" && role === "admin" ? (
             <AdminPanel
-              onDestinationAdded={destinationsState.reload}
-              onPostAdded={postsState.reload}
-              onProductAdded={productsState.reload}
+              onDestinationAdded={() => dispatch(fetchProducts())}
+              onPostAdded={() => dispatch(fetchPosts())}
+              onProductAdded={() => dispatch(fetchDestinations())}
               onSignOut={handleSignOut}
             />
           ) : null}
@@ -299,11 +279,5 @@ function AppContent() {
     </div>
   );
 }
-
-const App = () => (
-  <CartProvider>
-    <AppContent />
-  </CartProvider>
-);
 
 export default App;

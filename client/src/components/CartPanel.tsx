@@ -1,34 +1,27 @@
-import { useEffect, useMemo, useState } from "react";
-import { useCart } from "../context/useCart";
+import { useMemo } from "react";
+import { useTypedDispatch, useTypedSelector } from "../store/hooks";
+import {
+  addToCart,
+  checkoutCart,
+  clearCart,
+  decreaseItem,
+  selectCartItems,
+  selectCartTotals,
+  selectCartUi,
+} from "../store/slices/cartSlice";
 
 const CartPanel = () => {
-  const { state, dispatch, totalCost } = useCart();
-  const [showToast, setShowToast] = useState(false);
-  const [justCheckedOut, setJustCheckedOut] = useState(false);
-
-  useEffect(() => {
-    if (!showToast) return;
-
-    const timer = setTimeout(() => {
-      setShowToast(false);
-    }, 3000);
-
-    return () => clearTimeout(timer);
-  }, [showToast]);
-
-  const handleCheckout = () => {
-    if (state.items.length === 0) return;
-    setShowToast(true);
-    setJustCheckedOut(true);
-    dispatch({ type: "clear" });
-  };
+  const dispatch = useTypedDispatch();
+  const items = useTypedSelector(selectCartItems);
+  const { totalCost } = useTypedSelector(selectCartTotals);
+  const { justCheckedOut, showToast } = useTypedSelector(selectCartUi);
 
   const message = useMemo(() => {
     if (justCheckedOut) return "Thanks for your order! Your kit is on its way.";
-    if (state.items.length === 0)
+    if (items.length === 0)
       return "Your cart is empty. Add a guide or a travel accessory.";
     return "Review your kit and start checkout when ready";
-  }, [justCheckedOut, state.items.length]);
+  }, [justCheckedOut, items.length]);
 
   return (
     <aside className="cart">
@@ -39,7 +32,7 @@ const CartPanel = () => {
       ) : null}
       <div className="cart-header">
         <h3>Pack list</h3>
-        <button className="ghost" onClick={() => dispatch({ type: "clear" })}>
+        <button className="ghost" onClick={() => dispatch(clearCart())}>
           Clear
         </button>
       </div>
@@ -47,7 +40,7 @@ const CartPanel = () => {
       <p className="muted">{message}</p>
 
       <div className="cart-items">
-        {state.items.map((item) => (
+        {items.map((item) => (
           <div className="cart-item" key={item.product.id}>
             <div>
               <p className="strong">{item.product.name}</p>
@@ -57,16 +50,14 @@ const CartPanel = () => {
             <div className="quantity">
               <button
                 className="ghost"
-                onClick={() =>
-                  dispatch({ type: "decrease", productId: item.product.id })
-                }
+                onClick={() => dispatch(decreaseItem(item.product.id))}
               >
                 -
               </button>
               <span>{item.quantity}</span>
               <button
                 className="ghost"
-                onClick={() => dispatch({ type: "add", product: item.product })}
+                onClick={() => dispatch(addToCart(item.product))}
               >
                 +
               </button>
@@ -83,8 +74,8 @@ const CartPanel = () => {
 
         <button
           className="primary"
-          disabled={state.items.length === 0}
-          onClick={handleCheckout}
+          disabled={items.length === 0}
+          onClick={() => dispatch(checkoutCart())}
         >
           Checkout
         </button>

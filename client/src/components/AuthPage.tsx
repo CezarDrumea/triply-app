@@ -1,40 +1,21 @@
-import { useState } from "react";
-import type { ApiResponse, Role } from "../types";
-import { SERVER_LOCATION } from "../utils/constants";
+import type { SubmitEvent } from "react";
+import { useTypedDispatch, useTypedSelector } from "../store/hooks";
+import { login, setLoginRole } from "../store/slices/authSlice";
+import { setShowAuth } from "../store/slices/uiSlice";
 
-interface AuthPayload {
-  role: Role | null;
-}
+const AuthPage = () => {
+  const dispatch = useTypedDispatch();
+  const role = useTypedSelector((state) => state.auth.loginRole);
+  const loading = useTypedSelector((state) => state.auth.loginLoading);
+  const error = useTypedSelector((state) => state.auth.loginError);
 
-interface AuthPageProps {
-  onLogin: (role: Role) => void;
-}
-
-const AuthPage = ({ onLogin }: AuthPageProps) => {
-  const [role, setRole] = useState<Role>("user");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmit = async () => {
+  const handleSubmit = async (e: SubmitEvent<HTMLFormElement>) => {
+    e.preventDefault();
     try {
-      const response = await fetch(`${SERVER_LOCATION}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ role }),
-      });
-
-      if (!response.ok) throw new Error(`Login failed: ${response.status}`);
-
-      const payload = (await response.json()) as ApiResponse<AuthPayload>;
-
-      if (!payload.data.role) throw new Error("Login failed: missing role");
-
-      onLogin(payload.data.role);
+      await dispatch(login(role)).unwrap();
+      dispatch(setShowAuth(false));
     } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
+      console.error(err);
     }
   };
 
@@ -57,7 +38,7 @@ const AuthPage = ({ onLogin }: AuthPageProps) => {
               name="role"
               value="user"
               checked={role === "user"}
-              onChange={() => setRole("user")}
+              onChange={() => dispatch(setLoginRole("user"))}
             />
             <span>
               <span className="strong">User</span>
@@ -71,7 +52,7 @@ const AuthPage = ({ onLogin }: AuthPageProps) => {
               name="role"
               value="admin"
               checked={role === "admin"}
-              onChange={() => setRole("admin")}
+              onChange={() => dispatch(setLoginRole("admin"))}
             />
             <span>
               <span className="strong">Admin</span>
