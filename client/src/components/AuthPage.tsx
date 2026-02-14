@@ -1,23 +1,12 @@
-import type { SubmitEvent } from "react";
 import { useTypedDispatch, useTypedSelector } from "../store/hooks";
-import { login, setLoginRole } from "../store/slices/authSlice";
-import { setShowAuth } from "../store/slices/uiSlice";
+import { setLoginRole } from "../store/slices/authSlice";
+import { Form } from "react-router";
 
 const AuthPage = () => {
   const dispatch = useTypedDispatch();
   const role = useTypedSelector((state) => state.auth.loginRole);
   const loading = useTypedSelector((state) => state.auth.loginLoading);
   const error = useTypedSelector((state) => state.auth.loginError);
-
-  const handleSubmit = async (e: SubmitEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    try {
-      await dispatch(login(role)).unwrap();
-      dispatch(setShowAuth(false));
-    } catch (err) {
-      console.error(err);
-    }
-  };
 
   return (
     <div className="auth-page">
@@ -31,7 +20,7 @@ const AuthPage = () => {
           </p>
         </div>
 
-        <form className="auth-form" onSubmit={handleSubmit}>
+        <Form className="auth-form" method="post">
           <label className="auth-option">
             <input
               type="radio"
@@ -65,7 +54,7 @@ const AuthPage = () => {
           <button className="primary" type="submit" disabled={loading}>
             {loading ? "Signing in..." : "Continue"}
           </button>
-        </form>
+        </Form>
       </div>
     </div>
   );

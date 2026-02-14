@@ -1,283 +1,192 @@
-import { useCallback, useEffect, useMemo } from "react";
-import CartPanel from "./components/CartPanel";
-import SectionHeading from "./components/SectionHeading";
-import { type Product } from "./types";
-import DestinationCard from "./components/DestinationCard";
-import PostCard from "./components/PostCard";
-import ProductCard from "./components/ProductCard";
+import {
+  createBrowserRouter,
+  Navigate,
+  redirect,
+  RouterProvider,
+  type ActionFunctionArgs,
+} from "react-router";
+import Home from "./layouts/home";
+import Shop from "./routes/shop";
+import Blog from "./routes/blog";
+import Destinations from "./routes/destinations";
+import Admin from "./routes/admin";
 import AuthPage from "./components/AuthPage";
-import AdminPanel from "./components/AdminPanel";
-import {
-  setActiveTab,
-  setCategory,
-  setShowAuth,
-  TABS,
-  type Tab,
-} from "./store/slices/uiSlice";
-import { useTypedDispatch, useTypedSelector } from "./store/hooks";
-import {
-  addToCart,
-  fetchCart,
-  selectCartTotals,
-} from "./store/slices/cartSlice";
-import { loadSession, logout } from "./store/slices/authSlice";
+import { store } from "./store";
+import { adminActions } from "./store/slices/adminSlice";
+import type { ApiResponse, Destination, Post, Product, Role } from "./types";
+import { SERVER_LOCATION } from "./utils/constants";
 import {
   fetchDestinations,
   fetchPosts,
   fetchProducts,
 } from "./store/slices/catalogSlice";
+import { login, setLoginRole } from "./store/slices/authSlice";
 
-function App() {
-  const dispatch = useTypedDispatch();
-  const activeTab = useTypedSelector((state) => state.ui.activeTab);
-  const category = useTypedSelector((state) => state.ui.category);
-  const showAuth = useTypedSelector((state) => state.ui.showAuth);
+const getFormString = (formData: FormData, key: string) => {
+  const value = formData.get(key);
+  return typeof value === "string" ? value : "";
+};
 
-  const role = useTypedSelector((state) => state.auth.role);
+const adminAction = async ({ request }: ActionFunctionArgs) => {
+  const formData = await request.formData();
+  const intent = formData.get("intent");
 
-  const authLoading = useTypedSelector((state) => state.auth.authLoading);
+  if (intent === "product") {
+    store.dispatch(adminActions.setProductStatus(null));
 
-  const products = useTypedSelector((state) => state.catalog.products);
-  const posts = useTypedSelector((state) => state.catalog.posts);
-  const destinations = useTypedSelector((state) => state.catalog.destinations);
+    const payload = {
+      name: getFormString(formData, "name"),
+      price: +getFormString(formData, "price"),
+      category: getFormString(formData, "category") as Product["category"],
+      rating: +getFormString(formData, "rating"),
+      image: getFormString(formData, "image"),
+      badge: getFormString(formData, "badge") || null,
+      description: getFormString(formData, "description"),
+    };
 
-  const { totalItems } = useTypedSelector(selectCartTotals);
-
-  useEffect(() => {
-    dispatch(loadSession());
-    dispatch(fetchProducts());
-    dispatch(fetchPosts());
-    dispatch(fetchDestinations());
-    dispatch(fetchCart());
-  }, [dispatch]);
-
-  const tabs = useMemo<Tab[]>(
-    () => (role === "admin" ? [...TABS, "admin"] : [...TABS]),
-    [role],
-  );
-
-  const canShop = role === "user" || role === "admin";
-
-  const filteredProducts = useMemo(() => {
-    if (category === "all") return products;
-    return products.filter((product) => product.category === category);
-  }, [products, category]);
-
-  const addProductToCart = useCallback(
-    (product: Product) => void dispatch(addToCart(product)),
-    [dispatch],
-  );
-
-  useEffect(() => {
-    document.title = `Triply - ${activeTab}`;
-  }, [activeTab]);
-
-  const handleSignOut = useCallback(async () => {
     try {
-      await dispatch(logout()).unwrap();
-    } catch (err) {
-      console.error(err);
+      const response = await fetch(`${SERVER_LOCATION}/api/admin/products`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok)
+        throw new Error(`Failed to add product: ${response.status}`);
+
+      const result = (await response.json()) as ApiResponse<Product>;
+
+      if (!result.data?.id) throw new Error("Failed to add product");
+
+      store.dispatch(
+        adminActions.setProductStatus(`Added product #${result.data.id}`),
+      );
+      store.dispatch(adminActions.resetProductForm());
+      store.dispatch(fetchProducts());
+    } catch (error) {
+      store.dispatch(adminActions.setProductStatus((error as Error).message));
     }
-
-    dispatch(setActiveTab("shop"));
-  }, [dispatch]);
-
-  ////////////////
-
-  if (authLoading) {
-    return (
-      <div className="auth-page">
-        <div className="auth-card">
-          <p className="eyebrow">Triply Access</p>
-          <h1>Checking your session...</h1>
-          <p className="muted">We are loading your role and preferences.</p>
-        </div>
-      </div>
-    );
   }
 
-  if (showAuth) {
-    return <AuthPage />;
+  if (intent === "post") {
+    store.dispatch(adminActions.setPostStatus(null));
+
+    const payload = {
+      title: getFormString(formData, "title"),
+      excerpt: +getFormString(formData, "excerpt"),
+      city: getFormString(formData, "city"),
+      days: +getFormString(formData, "days"),
+      cover: getFormString(formData, "cover"),
+      date: getFormString(formData, "date"),
+    };
+
+    try {
+      const response = await fetch(`${SERVER_LOCATION}/api/admin/posts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok)
+        throw new Error(`Failed to add post: ${response.status}`);
+
+      const result = (await response.json()) as ApiResponse<Post>;
+
+      if (!result.data?.id) throw new Error("Failed to add post");
+
+      store.dispatch(
+        adminActions.setPostStatus(`Added post #${result.data.id}`),
+      );
+      store.dispatch(adminActions.resetPostForm());
+      store.dispatch(fetchPosts());
+    } catch (error) {
+      store.dispatch(adminActions.setPostStatus((error as Error).message));
+    }
   }
 
-  if (!role) {
-    return <AuthPage />;
+  if (intent === "destination") {
+    store.dispatch(adminActions.setDestinationStatus(null));
+
+    const payload = {
+      name: getFormString(formData, "name"),
+      country: +getFormString(formData, "country"),
+      temperature: getFormString(formData, "temperature"),
+      season: +getFormString(formData, "season"),
+      image: getFormString(formData, "image"),
+      highlight: getFormString(formData, "highlight"),
+    };
+
+    try {
+      const response = await fetch(
+        `${SERVER_LOCATION}/api/admin/destinations`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        },
+      );
+
+      if (!response.ok)
+        throw new Error(`Failed to add destination: ${response.status}`);
+
+      const result = (await response.json()) as ApiResponse<Destination>;
+
+      if (!result.data?.id) throw new Error("Failed to add destination");
+
+      store.dispatch(
+        adminActions.setDestinationStatus(
+          `Added destination #${result.data.id}`,
+        ),
+      );
+      store.dispatch(adminActions.resetDestinationForm());
+      store.dispatch(fetchDestinations());
+    } catch (error) {
+      store.dispatch(
+        adminActions.setDestinationStatus((error as Error).message),
+      );
+    }
   }
 
-  return (
-    <div className="page">
-      <header className="topbar">
-        <div className="brand">
-          <span className="logo">Triply</span>
-          <p className="muted">Shop the gear, read the routes.</p>
-        </div>
+  return null;
+};
 
-        <nav className="nav">
-          {tabs.map((tab: Tab) => (
-            <button
-              key={tab}
-              className={activeTab === tab ? "pill active" : "pill"}
-              onClick={() => dispatch(setActiveTab(tab))}
-            >
-              {tab}
-            </button>
-          ))}
-        </nav>
+const authAction = async ({ request }: ActionFunctionArgs) => {
+  const formData = await request.formData();
+  const role = formData.get("role");
 
-        <div className="cart-summary">
-          {canShop ? (
-            <>
-              <span className="muted">Cart</span>
-              <span className="pill active">{totalItems} items</span>
-            </>
-          ) : (
-            <span className="muted">Guest mode</span>
-          )}
+  if (role !== "user" && role !== "admin") {
+    store.dispatch(setLoginRole("user"));
+    return null;
+  }
 
-          <button
-            className="ghost"
-            onClick={() => {
-              if (role === "guest") dispatch(setShowAuth(true));
-              else void handleSignOut();
-            }}
-          >
-            {role === "guest" ? "Log in" : "Sign out"}
-          </button>
-        </div>
-      </header>
+  try {
+    await store.dispatch(login(role as Role)).unwrap();
+    return redirect("/shop");
+  } catch {
+    return null;
+  }
+};
 
-      <section className="hero">
-        <div>
-          <p className="eyebrow">Curated travel + gear</p>
-          <h1>Plan the trip.Pack the essentials. Keep the memories.</h1>
-          <p className="muted">
-            Triply blends ecommerce with a travel journal.
-          </p>
-          <div className="hero-actions">
-            <button
-              className="primary"
-              onClick={() => dispatch(setActiveTab("shop"))}
-            >
-              Start shopping
-            </button>
-            <button
-              className="ghost"
-              onClick={() => dispatch(setActiveTab("blog"))}
-            >
-              Browser itineraries
-            </button>
-          </div>
-        </div>
+const router = createBrowserRouter([
+  {
+    path: "/",
+    element: <Home />,
+    children: [
+      { index: true, element: <Navigate to="shop" replace /> },
+      { path: "shop", element: <Shop /> },
+      { path: "blog", element: <Blog /> },
+      { path: "destinations", element: <Destinations /> },
+      { path: "admin", element: <Admin />, action: adminAction },
+    ],
+  },
+  { path: "/auth", element: <AuthPage />, action: authAction },
+]);
 
-        <div className="hero-card">
-          <h3>Next departure</h3>
-          <p className="muted">
-            Kyoto winter loop ▸ 4 nights ▸ curated kit inside
-          </p>
-          <div className="hero-grid">
-            {destinations.slice(0, 3).map((destination) => (
-              <div key={destination.id}>
-                <p className="strong">{destination.name}</p>
-                <p className="muted">{destination.temperature}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <main className="content">
-        <section className="main">
-          {activeTab === "shop" ? (
-            <>
-              <SectionHeading
-                eyebrow="Shop"
-                title="Travel essentials with an editorial touch"
-                description="From minimalist packing cubes to matte map prints, build a pack list worth photographing."
-              />
-              <div className="filters">
-                {(["all", "gear", "prints", "guides"] as const).map((item) => (
-                  <button
-                    key={item}
-                    className={category === item ? "pill active" : "pill"}
-                    onClick={() => dispatch(setCategory(item))}
-                  >
-                    {item}
-                  </button>
-                ))}
-              </div>
-              <div className="grid products">
-                {filteredProducts.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    onAdd={addProductToCart}
-                    canAdd={canShop}
-                  />
-                ))}
-              </div>
-            </>
-          ) : null}
-
-          {activeTab === "blog" ? (
-            <>
-              <SectionHeading
-                eyebrow="Journal"
-                title="Short-form guides made for quick departures"
-                description="Grab a two-day itinerary or dig into a longer city loop with packing reminders."
-              />
-              <div className="grid posts">
-                {posts.map((post) => (
-                  <PostCard key={post.id} post={post} />
-                ))}
-              </div>
-            </>
-          ) : null}
-
-          {activeTab === "destinations" ? (
-            <>
-              <SectionHeading
-                eyebrow="Destinations"
-                title="Seasonal highlights with weather and mood"
-                description="Get to know new locations."
-              />
-              <div className="grid destinations">
-                {destinations.map((destination) => (
-                  <DestinationCard
-                    key={destination.id}
-                    destination={destination}
-                  />
-                ))}
-              </div>
-            </>
-          ) : null}
-
-          {activeTab === "admin" && role === "admin" ? (
-            <AdminPanel
-              onDestinationAdded={() => dispatch(fetchProducts())}
-              onPostAdded={() => dispatch(fetchPosts())}
-              onProductAdded={() => dispatch(fetchDestinations())}
-              onSignOut={handleSignOut}
-            />
-          ) : null}
-        </section>
-
-        {canShop ? <CartPanel /> : null}
-      </main>
-
-      <footer className="footer">
-        <div>
-          <p className="strong">Triply © copyright</p>
-          <p className="muted">Drop a new itinerary every day.</p>
-        </div>
-
-        <div className="footer-links">
-          <span className="pill">shipping</span>
-          <span className="pill">returns</span>
-          <span className="pill">faq</span>
-        </div>
-      </footer>
-    </div>
-  );
-}
+const App = () => {
+  return <RouterProvider router={router} />;
+};
 
 export default App;

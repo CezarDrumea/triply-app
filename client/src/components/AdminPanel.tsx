@@ -1,153 +1,24 @@
-import { useState, type SubmitEvent } from "react";
-import { SERVER_LOCATION } from "../utils/constants";
-import type { ApiResponse, Destination, Post, Product } from "../types";
+import { Form } from "react-router";
+import { useTypedDispatch, useTypedSelector } from "../store/hooks";
+import { adminActions } from "../store/slices/adminSlice";
+import type { Product } from "../types";
 
 interface AdminPanelProps {
   onSignOut: () => void;
-  onProductAdded: () => void;
-  onPostAdded: () => void;
-  onDestinationAdded: () => void;
 }
 
-const INITIAL_PRODUCT_FORM = {
-  name: "",
-  price: "",
-  category: "",
-  rating: "",
-  image: "",
-  badge: "",
-  description: "",
-};
-
-const INITIAL_POST_FORM = {
-  title: "",
-  excerpt: "",
-  city: "",
-  days: "",
-  cover: "",
-  date: "",
-};
-
-const INITIAL_DESTINATION_FORM = {
-  name: "",
-  country: "",
-  temperature: "",
-  season: "",
-  image: "",
-  highlight: "",
-};
-
-const AdminPanel = ({
-  onSignOut,
-  onPostAdded,
-  onProductAdded,
-  onDestinationAdded,
-}: AdminPanelProps) => {
-  const [productStatus, setProductStatus] = useState<string | null>(null);
-  const [postStatus, setPostStatus] = useState<string | null>(null);
-  const [destinationStatus, setDestinationStatus] = useState<string | null>(
-    null,
+const AdminPanel = ({ onSignOut }: AdminPanelProps) => {
+  const dispatch = useTypedDispatch();
+  const productStatus = useTypedSelector((state) => state.admin.productStatus);
+  const postStatus = useTypedSelector((state) => state.admin.postStatus);
+  const destinationStatus = useTypedSelector(
+    (state) => state.admin.destinationStatus,
   );
-
-  const [productForm, setProductForm] = useState(INITIAL_PRODUCT_FORM);
-
-  const [postForm, setPostForm] = useState(INITIAL_POST_FORM);
-
-  const [destinationForm, setDestinationForm] = useState(
-    INITIAL_DESTINATION_FORM,
+  const productForm = useTypedSelector((state) => state.admin.productForm);
+  const postForm = useTypedSelector((state) => state.admin.postForm);
+  const destinationForm = useTypedSelector(
+    (state) => state.admin.destinationForm,
   );
-
-  const handlePostSubmit = async (e: SubmitEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setPostStatus(null);
-
-    try {
-      const response = await fetch(`${SERVER_LOCATION}/api/admin/posts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          ...postForm,
-          days: Number(postForm.days),
-        }),
-      });
-
-      if (!response.ok)
-        throw new Error(`Failed to add post: ${response.status}`);
-
-      const payload = (await response.json()) as ApiResponse<Post>;
-
-      if (!payload.data.id) throw new Error("Failed to add post");
-
-      setPostStatus(`Added post #${payload.data.id}`);
-      setPostForm(INITIAL_POST_FORM);
-      onPostAdded();
-    } catch (err) {
-      setPostStatus((err as Error).message);
-    }
-  };
-
-  const handleProductSubmit = async (e: SubmitEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setProductStatus(null);
-
-    try {
-      const response = await fetch(`${SERVER_LOCATION}/api/admin/products`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          ...productForm,
-          price: Number(productForm.price),
-          rating: Number(productForm.rating),
-          badge: productForm.badge || null,
-        }),
-      });
-
-      if (!response.ok)
-        throw new Error(`Failed to add product: ${response.status}`);
-
-      const payload = (await response.json()) as ApiResponse<Product>;
-
-      if (!payload.data.id) throw new Error("Failed to add product");
-
-      setProductStatus(`Added product #${payload.data.id}`);
-      setProductForm(INITIAL_PRODUCT_FORM);
-      onProductAdded();
-    } catch (err) {
-      setProductStatus((err as Error).message);
-    }
-  };
-
-  const handleDestinationSubmit = async (e: SubmitEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setDestinationStatus(null);
-
-    try {
-      const response = await fetch(
-        `${SERVER_LOCATION}/api/admin/destinations`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(destinationForm),
-        },
-      );
-
-      if (!response.ok)
-        throw new Error(`Failed to add destination: ${response.status}`);
-
-      const payload = (await response.json()) as ApiResponse<Destination>;
-
-      if (!payload.data.id) throw new Error("Failed to add destination");
-
-      setDestinationStatus(`Added destination #${payload.data.id}`);
-      setDestinationForm(INITIAL_DESTINATION_FORM);
-      onDestinationAdded();
-    } catch (err) {
-      setDestinationStatus((err as Error).message);
-    }
-  };
 
   return (
     <section className="admin-panel">
@@ -165,17 +36,21 @@ const AdminPanel = ({
       </div>
 
       <div className="admin-grid">
-        <form className="admin-card" onSubmit={handleProductSubmit}>
+        <Form className="admin-card" method="post">
+          <input type="hidden" name="intent" value="product" />
           <h3>Add product</h3>
           <label>
             Name
             <input
+              name="name"
               type="text"
               value={productForm.name}
               onChange={(e) =>
-                setProductForm((prev) => ({ ...prev, price: e.target.value }))
+                dispatch(
+                  adminActions.updateProductForm({ name: e.target.value }),
+                )
               }
-              placeholder="38"
+              placeholder="Name"
               required
             />
           </label>
@@ -183,14 +58,14 @@ const AdminPanel = ({
             <label>
               Price
               <input
+                name="price"
                 type="number"
                 step={0.1}
                 value={productForm.price}
                 onChange={(e) =>
-                  setProductForm((prev) => ({
-                    ...prev,
-                    price: e.target.value,
-                  }))
+                  dispatch(
+                    adminActions.updateProductForm({ price: e.target.value }),
+                  )
                 }
                 placeholder="38"
                 required
@@ -200,14 +75,14 @@ const AdminPanel = ({
             <label>
               Rating
               <input
+                name="rating"
                 type="number"
                 step={0.1}
                 value={productForm.rating}
                 onChange={(e) =>
-                  setProductForm((prev) => ({
-                    ...prev,
-                    rating: e.target.value,
-                  }))
+                  dispatch(
+                    adminActions.updateProductForm({ rating: e.target.value }),
+                  )
                 }
                 placeholder="4.8"
                 required
@@ -217,12 +92,14 @@ const AdminPanel = ({
           <label>
             Category
             <select
+              name="category"
               value={productForm.category}
               onChange={(e) =>
-                setProductForm((prev) => ({
-                  ...prev,
-                  category: e.target.value,
-                }))
+                dispatch(
+                  adminActions.updateProductForm({
+                    category: e.target.value as Product["category"],
+                  }),
+                )
               }
             >
               <option value="gear">gear</option>
@@ -233,13 +110,13 @@ const AdminPanel = ({
           <label>
             Image URL
             <input
+              name="image"
               type="text"
               value={productForm.image}
               onChange={(e) =>
-                setProductForm((prev) => ({
-                  ...prev,
-                  image: e.target.value,
-                }))
+                dispatch(
+                  adminActions.updateProductForm({ image: e.target.value }),
+                )
               }
               placeholder="https://images.example.com/..."
               required
@@ -248,13 +125,13 @@ const AdminPanel = ({
           <label>
             Badge (optional)
             <input
+              name="badge"
               type="text"
               value={productForm.badge}
               onChange={(e) =>
-                setProductForm((prev) => ({
-                  ...prev,
-                  badge: e.target.value,
-                }))
+                dispatch(
+                  adminActions.updateProductForm({ badge: e.target.value }),
+                )
               }
               placeholder="New"
             />
@@ -262,12 +139,14 @@ const AdminPanel = ({
           <label>
             Description
             <textarea
+              name="description"
               value={productForm.description}
               onChange={(e) =>
-                setProductForm((prev) => ({
-                  ...prev,
-                  description: e.target.value,
-                }))
+                dispatch(
+                  adminActions.updateProductForm({
+                    description: e.target.value,
+                  }),
+                )
               }
               placeholder="Today is a beautiful day for a trip."
               required
@@ -277,17 +156,19 @@ const AdminPanel = ({
           <button className="primary" type="submit">
             Add product
           </button>
-        </form>
+        </Form>
 
-        <form className="admin-card" onSubmit={handlePostSubmit}>
+        <Form className="admin-card" method="post">
+          <input type="hidden" name="intent" value="post" />
           <h3>Add journal post</h3>
           <label>
             Title
             <input
+              name="title"
               type="text"
               value={postForm.title}
               onChange={(e) =>
-                setPostForm((prev) => ({ ...prev, title: e.target.value }))
+                dispatch(adminActions.updatePostForm({ title: e.target.value }))
               }
               placeholder="Lisbon"
               required
@@ -297,9 +178,12 @@ const AdminPanel = ({
           <label>
             Excerpt
             <textarea
+              name="excerpt"
               value={postForm.excerpt}
               onChange={(e) =>
-                setPostForm((prev) => ({ ...prev, excerpt: e.target.value }))
+                dispatch(
+                  adminActions.updatePostForm({ excerpt: e.target.value }),
+                )
               }
             />
           </label>
@@ -308,10 +192,13 @@ const AdminPanel = ({
             <label>
               City
               <input
+                name="city"
                 type="text"
                 value={postForm.city}
                 onChange={(e) =>
-                  setPostForm((prev) => ({ ...prev, city: e.target.value }))
+                  dispatch(
+                    adminActions.updatePostForm({ city: e.target.value }),
+                  )
                 }
                 placeholder="Lisbon"
                 required
@@ -321,10 +208,13 @@ const AdminPanel = ({
             <label>
               Days
               <input
+                name="days"
                 type="number"
                 value={postForm.days}
                 onChange={(e) =>
-                  setPostForm((prev) => ({ ...prev, days: e.target.value }))
+                  dispatch(
+                    adminActions.updatePostForm({ days: e.target.value }),
+                  )
                 }
                 placeholder="2"
                 required
@@ -335,10 +225,11 @@ const AdminPanel = ({
           <label>
             Cover URL
             <input
+              name="cover"
               type="text"
               value={postForm.cover}
               onChange={(e) =>
-                setPostForm((prev) => ({ ...prev, cover: e.target.value }))
+                dispatch(adminActions.updatePostForm({ cover: e.target.value }))
               }
               placeholder="https://images.example.com/..."
               required
@@ -348,29 +239,31 @@ const AdminPanel = ({
           <label>
             Date (optional)
             <input
+              name="date"
               type="date"
               value={postForm.date}
               onChange={(e) =>
-                setPostForm((prev) => ({ ...prev, date: e.target.value }))
+                dispatch(adminActions.updatePostForm({ date: e.target.value }))
               }
             />
           </label>
           {postStatus ? <p className="status">{postStatus}</p> : null}
           <button className="primary">Add post</button>
-        </form>
+        </Form>
 
-        <form className="admin-card" onSubmit={handleDestinationSubmit}>
+        <Form className="admin-card" method="post">
+          <input type="hidden" name="intent" value="destination" />
           <h3>Add destination</h3>
           <label>
             Name
             <input
+              name="name"
               type="text"
               value={destinationForm.name}
               onChange={(e) =>
-                setDestinationForm((prev) => ({
-                  ...prev,
-                  name: e.target.value,
-                }))
+                dispatch(
+                  adminActions.updateDestinationForm({ name: e.target.value }),
+                )
               }
               placeholder="Osaka"
               required
@@ -381,13 +274,15 @@ const AdminPanel = ({
             <label>
               Country
               <input
+                name="country"
                 type="text"
                 value={destinationForm.country}
                 onChange={(e) =>
-                  setDestinationForm((prev) => ({
-                    ...prev,
-                    country: e.target.value,
-                  }))
+                  dispatch(
+                    adminActions.updateDestinationForm({
+                      country: e.target.value,
+                    }),
+                  )
                 }
                 placeholder="Japan"
                 required
@@ -397,13 +292,15 @@ const AdminPanel = ({
             <label>
               Season
               <input
+                name="season"
                 type="text"
                 value={destinationForm.season}
                 onChange={(e) =>
-                  setDestinationForm((prev) => ({
-                    ...prev,
-                    season: e.target.value,
-                  }))
+                  dispatch(
+                    adminActions.updateDestinationForm({
+                      season: e.target.value,
+                    }),
+                  )
                 }
                 placeholder="Spring"
                 required
@@ -414,13 +311,15 @@ const AdminPanel = ({
           <label>
             Temperature range
             <input
+              name="temprature"
               type="text"
               value={destinationForm.temperature}
               onChange={(e) =>
-                setDestinationForm((prev) => ({
-                  ...prev,
-                  temperature: e.target.value,
-                }))
+                dispatch(
+                  adminActions.updateDestinationForm({
+                    temperature: e.target.value,
+                  }),
+                )
               }
               placeholder="20-24C"
               required
@@ -430,13 +329,13 @@ const AdminPanel = ({
           <label>
             Image URL
             <input
+              name="image"
               type="text"
               value={destinationForm.image}
               onChange={(e) =>
-                setDestinationForm((prev) => ({
-                  ...prev,
-                  image: e.target.value,
-                }))
+                dispatch(
+                  adminActions.updateDestinationForm({ image: e.target.value }),
+                )
               }
               placeholder="https://images.example.com/..."
               required
@@ -446,12 +345,14 @@ const AdminPanel = ({
           <label>
             Highlight
             <textarea
+              name="highligh"
               value={destinationForm.highlight}
               onChange={(e) =>
-                setDestinationForm((prev) => ({
-                  ...prev,
-                  highlight: e.target.value,
-                }))
+                dispatch(
+                  adminActions.updateDestinationForm({
+                    highlight: e.target.value,
+                  }),
+                )
               }
               placeholder="Late Spring walks through trees of Sakura."
             />
@@ -460,7 +361,7 @@ const AdminPanel = ({
             <p className="status">{destinationStatus}</p>
           ) : null}
           <button className="primary">Add destination</button>
-        </form>
+        </Form>
       </div>
     </section>
   );
